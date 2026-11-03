@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Script from "next/script";
+import { Analytics } from "@vercel/analytics/next";
 import { ToastProvider } from "@/components/toast-provider";
 import { AnalyticsProvider } from "@/components/analytics-provider";
 import "./globals.css";
@@ -213,6 +214,7 @@ export default function RootLayout({
             {children}
           </AnalyticsProvider>
         </ToastProvider>
+        <Analytics />
       </body>
     </html>
   );
