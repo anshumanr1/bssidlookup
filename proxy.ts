@@ -14,8 +14,42 @@ import {
 // First line of defense for all API routes. The routes themselves run the same
 // checks via guardRequest as a second layer; the two run in separate runtime
 // instances and do not share counter state.
+// Team password gate (HTTP Basic Auth). Any username; the password comes from
+// the SITE_PASSWORD environment variable. Fails closed if it is not set.
+function safeEqual(a: string, b: string): boolean {
+  let diff = a.length ^ b.length;
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    diff |= (a.charCodeAt(i) || 0) ^ (b.charCodeAt(i) || 0);
+  }
+  return diff === 0;
+}
+
+function passwordGate(request: NextRequest): NextResponse | null {
+  const expected = process.env.SITE_PASSWORD;
+  if (!expected) {
+    return new NextResponse('Access is not configured yet (SITE_PASSWORD is not set).', { status: 503 });
+  }
+  const header = request.headers.get('authorization') || '';
+  if (header.startsWith('Basic ')) {
+    try {
+      const decoded = atob(header.slice(6));
+      const password = decoded.slice(decoded.indexOf(':') + 1);
+      if (safeEqual(password, expected)) return null;
+    } catch {
+      // fall through to the challenge
+    }
+  }
+  return new NextResponse('Password required.', {
+    status: 401,
+    headers: { 'WWW-Authenticate': 'Basic realm="BSSID Locator", charset="UTF-8"' },
+  });
+}
+
 export function proxy(request: NextRequest) {
-  // Only apply to API routes
+  const denied = passwordGate(request);
+  if (denied) return denied;
+
+  // The checks below apply to API routes only
   if (!request.nextUrl.pathname.startsWith('/api/')) {
     return NextResponse.next();
   }
@@ -118,7 +152,8 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
+  // Every path except Next.js build assets, so the whole site sits behind the password
   matcher: [
-    '/api/:path*',
+    '/((?!_next/static|_next/image).*)',
   ],
 };
