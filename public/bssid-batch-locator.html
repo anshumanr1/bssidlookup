@@ -70,13 +70,13 @@ td.num{font-family:var(--mono);font-size:12px}
   <div class="grid">
     <section class="panel">
       <h2>Input</h2>
-      <label for="csv">BSSID list or CSV: <code>bssid[,lat,lng][,id]</code>, one per line (header row optional)</label>
-      <textarea id="csv" rows="9" spellcheck="false" placeholder="bssid,lat,lng,id&#10;54:3D:60:E0:78:4D,19.1201,73.0099,C6-0001&#10;6e:22:f7:f6:f2:6c&#10;92:03:2e:98:0b:2d,,,C6-0002"></textarea>
+      <label for="csv">BSSIDs, one per line. Optional reference after a comma: <code>bssid[,id]</code></label>
+      <textarea id="csv" rows="9" spellcheck="false" placeholder="54:3D:60:E0:78:4D&#10;6e:22:f7:f6:f2:6c&#10;92:03:2e:98:0b:2d,C6-0002"></textarea>
       <div class="inline">
         <input type="file" id="file" accept=".csv,.txt" style="width:auto">
         <span class="hint" id="parseInfo" style="margin:0"></span>
       </div>
-      <div class="hint">Optional lat,lng = ground truth (installer GPS) to measure error. Optional id = your reference (e.g. C6 or customer id).</div>
+      <div class="hint">The optional reference (e.g. C6 or customer id) is carried through to the results and CSV.</div>
     </section>
 
     <section class="panel">
@@ -107,8 +107,8 @@ td.num{font-family:var(--mono);font-size:12px}
   <section class="panel">
     <h2>Results</h2>
     <div class="tablewrap"><table>
-      <thead><tr><th>#</th><th>Id</th><th>BSSID</th><th>Apple</th><th>Apple lat, lng</th><th>Apple acc.</th><th>Neighbours sent</th><th>Google</th><th>Google lat, lng</th><th>Google acc.</th><th>Apple↔Google</th><th>Apple error</th><th>Google error</th></tr></thead>
-      <tbody id="tbody"><tr><td colspan="13" style="text-align:center;color:var(--muted);padding:20px">Paste BSSIDs and press Run batch.</td></tr></tbody>
+      <thead><tr><th>#</th><th>Id</th><th>BSSID</th><th>Apple</th><th>Apple lat, lng</th><th>Apple acc.</th><th>Neighbours sent</th><th>Google</th><th>Google lat, lng</th><th>Google acc.</th><th>Apple↔Google</th></tr></thead>
+      <tbody id="tbody"><tr><td colspan="11" style="text-align:center;color:var(--muted);padding:20px">Paste BSSIDs and press Run batch.</td></tr></tbody>
     </table></div>
   </section>
 
@@ -117,7 +117,6 @@ td.num{font-family:var(--mono);font-size:12px}
     <div class="legend">
       <span><span class="dot" style="background:#e53935"></span>Apple</span>
       <span><span class="dot" style="background:#1e88e5"></span>Google</span>
-      <span><span class="dot" style="background:#2e7d32"></span>Ground truth</span>
     </div>
   </section>
 </main>
@@ -147,24 +146,23 @@ function msg(cls,text){const el=$("#msg"); el.className="msg "+(cls||""); el.tex
 function parseInput(t){
   const lines=t.split(/\r?\n/).map(l=>l.trim()).filter(Boolean); if(!lines.length) return [];
   const split=l=>l.split(/[,\t;]/).map(x=>x.trim().replace(/^"|"$/g,""));
-  let idx={m:0,lat:1,lng:2,id:3}, start=0;
+  let idx={m:0,id:1}, start=0;
   const first=split(lines[0]);
   if (!normMac(first[0])){
     const h=first.map(x=>x.toLowerCase()), f=re=>h.findIndex(x=>re.test(x));
-    idx={m:f(/mac|bssid/), lat:f(/^lat/), lng:f(/^(lng|lon|long)/), id:f(/^(id|c6|group|ref|customer|building|site)/)};
+    idx={m:f(/mac|bssid/), id:f(/^(id|c6|group|ref|customer|building|site)/)};
     if (idx.m<0) throw new Error("Header row has no bssid/mac column.");
     start=1;
   }
   const rows=[], seen=new Set();
   lines.slice(start).forEach(l=>{
     const c=split(l), mac=normMac(c[idx.m]); if(!mac||seen.has(mac)) return; seen.add(mac);
-    const la=idx.lat>=0?parseFloat(c[idx.lat]):NaN, lo=idx.lng>=0?parseFloat(c[idx.lng]):NaN;
-    rows.push({mac, id: idx.id>=0 ? (c[idx.id]||"") : "", truth: validLL(la,lo)?{lat:la,lng:lo}:null});
+    rows.push({mac, id: idx.id>=0 ? (c[idx.id]||"") : ""});
   });
   return rows;
 }
 function refreshParseInfo(){
-  try{ const r=parseInput($("#csv").value); $("#parseInfo").textContent = r.length ? `${r.length} unique BSSIDs · ${r.filter(x=>x.truth).length} with ground truth` : ""; }
+  try{ const r=parseInput($("#csv").value); $("#parseInfo").textContent = r.length ? `${r.length} unique BSSIDs` : ""; }
   catch(e){ $("#parseInfo").textContent=e.message; }
 }
 
@@ -260,18 +258,15 @@ function render(fit){
     return `<tr><td class="num">${r.n}</td><td>${esc(r.id)}</td><td class="num">${r.mac}${r.apple&&r.apple.used&&r.apple.used!==r.mac?`<br><span style="color:var(--muted)">as ${r.apple.used}</span>`:""}</td>
       <td>${cell(r.apple)}</td><td class="num">${a?gm(a.lat,a.lng):"—"}</td><td class="num">${a?fmtM(a.acc):"—"}</td>
       <td class="num">${r.sent||"—"}</td><td>${cell(r.google)}</td><td class="num">${g?gm(g.lat,g.lng):"—"}</td><td class="num">${g?fmtM(g.acc):"—"}</td>
-      <td class="num">${a&&g?fmtM(haversine(a,g)):"—"}</td><td class="num">${a&&r.truth?fmtM(haversine(r.truth,a)):"—"}</td><td class="num">${g&&r.truth?fmtM(haversine(r.truth,g)):"—"}</td></tr>`;
+      <td class="num">${a&&g?fmtM(haversine(a,g)):"—"}</td></tr>`;
   }).join("");
   // stats
   if(!done.length){ $("#stats").innerHTML=""; renderMap(); return; }
   const aOk=done.filter(r=>r.apple.state==="ok"), gOk=done.filter(r=>r.google&&r.google.state==="ok");
   const ag=done.filter(r=>r.apple.state==="ok"&&r.google&&r.google.state==="ok").map(r=>haversine(r.apple.primary,r.google));
-  const aErr=aOk.filter(r=>r.truth).map(r=>haversine(r.truth,r.apple.primary)), gErr=gOk.filter(r=>r.truth).map(r=>haversine(r.truth,r.google));
   const st=[["Processed",`${done.length} / ${rows.length}`],["Apple hit rate",`${aOk.length} · ${pct(aOk.length,done.length)}`],
     ["Google hit rate (all)",`${gOk.length} · ${pct(gOk.length,done.length)}`],["Google hit rate (when Apple found)",pct(gOk.length,aOk.length)],
     ["Median Apple↔Google",ag.length?fmtM(median(ag)):"—"],["Google requests used",String(googleCalls)]];
-  if (aErr.length) st.push(["Apple median error",fmtM(median(aErr))],["Apple within 100 m",pct(aErr.filter(e=>e<=100).length,aErr.length)]);
-  if (gErr.length) st.push(["Google median error",fmtM(median(gErr))],["Google within 100 m",pct(gErr.filter(e=>e<=100).length,gErr.length)]);
   $("#stats").innerHTML=st.map(([k,v])=>`<div class="stat"><div class="k">${esc(k)}</div><div class="v">${esc(v)}</div></div>`).join("");
   renderMap(fit);
 }
@@ -294,8 +289,6 @@ function renderMap(fit){
       L.circleMarker([p.lat,p.lng],{radius:6,color:"#fff",weight:1,fillColor:"#e53935",fillOpacity:1}).bindPopup("Apple<br>"+label).addTo(layer); }
     if (r.google&&r.google.state==="ok"){ const g=r.google; pts.push([g.lat,g.lng]);
       L.circleMarker([g.lat,g.lng],{radius:6,color:"#fff",weight:1,fillColor:"#1e88e5",fillOpacity:1}).bindPopup("Google<br>"+label).addTo(layer); }
-    if (r.truth){ pts.push([r.truth.lat,r.truth.lng]);
-      L.circleMarker([r.truth.lat,r.truth.lng],{radius:5,color:"#fff",weight:1,fillColor:"#2e7d32",fillOpacity:1}).bindPopup("Ground truth<br>"+label).addTo(layer); }
   });
   if (fit && pts.length) pts.length===1?map.setView(pts[0],17):map.fitBounds(pts,{padding:[30,30],maxZoom:18});
 }
@@ -303,12 +296,11 @@ function renderMap(fit){
 /* ---------- CSV export ---------- */
 function download(){
   const q=v=>{v=v==null?"":String(v);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;};
-  const head=["n","id","bssid","apple_status","apple_bssid_used","apple_lat","apple_lng","apple_acc_m","neighbours_sent","google_status","google_lat","google_lng","google_acc_m","apple_google_dist_m","truth_lat","truth_lng","apple_error_m","google_error_m","note"];
+  const head=["n","id","bssid","apple_status","apple_bssid_used","apple_lat","apple_lng","apple_acc_m","neighbours_sent","google_status","google_lat","google_lng","google_acc_m","apple_google_dist_m","note"];
   const out=[head.join(",")].concat(rows.map(r=>{
     const a=r.apple&&r.apple.state==="ok"?r.apple.primary:null, g=r.google&&r.google.state==="ok"?r.google:null;
     return [r.n,r.id,r.mac,r.apple?r.apple.state:"",r.apple&&r.apple.used||"",a?a.lat:"",a?a.lng:"",a&&a.acc!=null?Math.round(a.acc):"",r.sent||"",
       r.google?r.google.state:"",g?g.lat:"",g?g.lng:"",g&&g.acc!=null?Math.round(g.acc):"",a&&g?Math.round(haversine(a,g)):"",
-      r.truth?r.truth.lat:"",r.truth?r.truth.lng:"",a&&r.truth?Math.round(haversine(r.truth,a)):"",g&&r.truth?Math.round(haversine(r.truth,g)):"",
       [r.apple&&r.apple.msg,r.google&&r.google.msg].filter(Boolean).join("; ")].map(q).join(",");
   }));
   const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([out.join("\n")],{type:"text/csv"}));
