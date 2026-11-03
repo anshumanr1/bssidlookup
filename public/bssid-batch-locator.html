@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BSSID Batch Locator</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+:root{
+  --bg:#f5f6f8; --panel:#ffffff; --ink:#15181d; --muted:#6a7280; --line:#e2e5ea;
+  --accent:#0a5bd3; --accent-ink:#ffffff; --ok:#137a3a; --warn:#a15c00; --bad:#b3261e;
+  --ok-bg:#e6f4ea; --warn-bg:#fff3dc; --bad-bg:#fdecea; --chip:#eef1f5;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0f1115; --panel:#171a20; --ink:#e7e9ee; --muted:#9aa3b2; --line:#2a2f38;
+    --accent:#4d8fff; --accent-ink:#0b0d11; --ok:#5cc985; --warn:#f0b357; --bad:#ff8a80;
+    --ok-bg:#15301f; --warn-bg:#33270f; --bad-bg:#3a1a18; --chip:#222731;
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+header,main{max-width:1280px;margin:0 auto;padding:0 16px}
+header{padding-top:18px;display:flex;align-items:baseline;gap:16px;flex-wrap:wrap}
+h1{font-size:20px;margin:0 0 12px}
+header a{font-size:13px;color:var(--accent)}
+main{display:grid;gap:16px;padding-bottom:40px}
+.grid{display:grid;grid-template-columns:1.2fr 1fr;gap:16px} @media(max-width:900px){.grid{grid-template-columns:1fr}}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px}
+.panel h2{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:0 0 12px}
+label{font-size:12px;color:var(--muted)}
+input,select,textarea{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:7px 9px;width:100%}
+textarea{font:12px/1.4 var(--mono);resize:vertical}
+input.mono{font-family:var(--mono);font-size:13px}
+button{font:inherit;cursor:pointer;border-radius:6px;border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:7px 12px}
+button:hover{border-color:var(--accent)} button:disabled{opacity:.5;cursor:default}
+button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
+.inline{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px}
+.inline input[type=checkbox]{width:auto} .inline select{width:auto}
+.hint{font-size:12px;color:var(--muted);margin-top:6px}
+code{font-family:var(--mono);font-size:12px}
+.progress{height:6px;background:var(--chip);border-radius:3px;overflow:hidden;margin-top:12px}
+.progress>div{height:100%;width:0;background:var(--accent);transition:width .2s}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+.stat .k{font-size:12px;color:var(--muted)} .stat .v{font-size:18px;font-weight:600;margin-top:2px;font-variant-numeric:tabular-nums}
+.tablewrap{overflow:auto;max-height:520px;border:1px solid var(--line);border-radius:8px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+th{position:sticky;top:0;background:var(--panel);font-size:11px;text-transform:uppercase;color:var(--muted)}
+td.num{font-family:var(--mono);font-size:12px}
+.st{font-size:11px;font-weight:600;padding:2px 7px;border-radius:10px}
+.st.ok{background:var(--ok-bg);color:var(--ok)} .st.miss{background:var(--warn-bg);color:var(--warn)}
+.st.err{background:var(--bad-bg);color:var(--bad)} .st.run,.st.skip{background:var(--chip);color:var(--muted)}
+.msg{margin-top:10px;font-size:13px;padding:8px 10px;border-radius:6px;display:none}
+.msg.warn{display:block;background:var(--warn-bg);color:var(--warn)} .msg.err{display:block;background:var(--bad-bg);color:var(--bad)} .msg.ok{display:block;background:var(--ok-bg);color:var(--ok)}
+#map{height:420px;border-radius:10px;border:1px solid var(--line)}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:8px}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:4px;vertical-align:middle}
+</style>
+</head>
+<body>
+<header>
+  <h1>BSSID Batch Locator</h1>
+  <a href="/bssid-neighbour-locator.html">Single BSSID lookup →</a>
+</header>
+<main>
+  <div class="grid">
+    <section class="panel">
+      <h2>Input</h2>
+      <label for="csv">BSSID list or CSV: <code>bssid[,lat,lng][,id]</code>, one per line (header row optional)</label>
+      <textarea id="csv" rows="9" spellcheck="false" placeholder="bssid,lat,lng,id&#10;54:3D:60:E0:78:4D,19.1201,73.0099,C6-0001&#10;6e:22:f7:f6:f2:6c&#10;92:03:2e:98:0b:2d,,,C6-0002"></textarea>
+      <div class="inline">
+        <input type="file" id="file" accept=".csv,.txt" style="width:auto">
+        <span class="hint" id="parseInfo" style="margin:0"></span>
+      </div>
+      <div class="hint">Optional lat,lng = ground truth (installer GPS) to measure error. Optional id = your reference (e.g. C6 or customer id).</div>
+    </section>
+
+    <section class="panel">
+      <h2>Settings</h2>
+      <label for="gkey">Google Geolocation API key (kept in this tab only)</label>
+      <input id="gkey" class="mono" type="password" autocomplete="off" spellcheck="false">
+      <div class="inline">
+        <label for="nearN">Neighbours to send</label>
+        <select id="nearN"><option>3</option><option selected>5</option><option>8</option><option>12</option><option>20</option></select>
+        <label for="maxDist">within</label>
+        <select id="maxDist"><option value="50">50 m</option><option value="100">100 m</option><option value="150" selected>150 m</option><option value="300">300 m</option><option value="100000">any</option></select>
+      </div>
+      <div class="inline"><input type="checkbox" id="optUniversal" checked><label for="optUniversal" style="color:var(--ink)">If not found and locally administered, retry the manufacturer-assigned form</label></div>
+      <div class="inline"><input type="checkbox" id="optGoogle" checked><label for="optGoogle" style="color:var(--ink)">Query Google (1 request per BSSID found in Apple)</label></div>
+      <div class="inline">
+        <button class="primary" id="runBtn">Run batch</button>
+        <button id="stopBtn" disabled>Stop</button>
+        <button id="dlBtn" disabled>Download results CSV</button>
+      </div>
+      <div class="progress"><div id="bar"></div></div>
+      <div class="hint" id="progInfo">Apple lookups are paced to about 50 per minute to stay within the lookup service's limit.</div>
+      <div id="msg" class="msg"></div>
+    </section>
+  </div>
+
+  <section class="stats" id="stats"></section>
+
+  <section class="panel">
+    <h2>Results</h2>
+    <div class="tablewrap"><table>
+      <thead><tr><th>#</th><th>Id</th><th>BSSID</th><th>Apple</th><th>Apple lat, lng</th><th>Apple acc.</th><th>Neighbours sent</th><th>Google</th><th>Google lat, lng</th><th>Google acc.</th><th>Apple↔Google</th><th>Apple error</th><th>Google error</th></tr></thead>
+      <tbody id="tbody"><tr><td colspan="13" style="text-align:center;color:var(--muted);padding:20px">Paste BSSIDs and press Run batch.</td></tr></tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <div id="map"></div>
+    <div class="legend">
+      <span><span class="dot" style="background:#e53935"></span>Apple</span>
+      <span><span class="dot" style="background:#1e88e5"></span>Google</span>
+      <span><span class="dot" style="background:#2e7d32"></span>Ground truth</span>
+    </div>
+  </section>
+</main>
+
+<script>
+"use strict";
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+function normMac(s){
+  s=String(s||"").trim();
+  if (/^[0-9a-f]{1,2}([:\-][0-9a-f]{1,2}){5}$/i.test(s)) return s.split(/[:\-]/).map(o=>o.padStart(2,"0").toLowerCase()).join(":");
+  const h=s.replace(/[^0-9a-f]/gi,""); return h.length===12 ? h.toLowerCase().match(/../g).join(":") : null;
+}
+const isLocalAdmin=m=>(parseInt(m.slice(0,2),16)&2)!==0;
+const toUniversal=m=>(parseInt(m.slice(0,2),16)&0xfd).toString(16).padStart(2,"0")+m.slice(2);
+const validLL=(a,b)=>{a=+a;b=+b;return isFinite(a)&&isFinite(b)&&Math.abs(a)<=90&&Math.abs(b)<=180&&!(a===0&&b===0);};
+function haversine(a,b){const R=6371000,r=x=>x*Math.PI/180,dLat=r(b.lat-a.lat),dLng=r(b.lng-a.lng);
+  const h=Math.sin(dLat/2)**2+Math.cos(r(a.lat))*Math.cos(r(b.lat))*Math.sin(dLng/2)**2; return 2*R*Math.asin(Math.sqrt(h));}
+const fmtM=m=>m==null||!isFinite(m)?"—":(m>=1000?(m/1000).toFixed(1)+" km":Math.round(m)+" m");
+const median=a=>{const s=[...a].sort((x,y)=>x-y),n=s.length;return n?(n%2?s[(n-1)/2]:(s[n/2-1]+s[n/2])/2):NaN;};
+const pct=(a,b)=>b?Math.round(100*a/b)+"%":"—";
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const gm=(lat,lng)=>`<a href="https://www.google.com/maps?q=${lat},${lng}" target="_blank" rel="noopener">${(+lat).toFixed(6)}, ${(+lng).toFixed(6)}</a>`;
+function msg(cls,text){const el=$("#msg"); el.className="msg "+(cls||""); el.textContent=text||"";}
+
+/* ---------- input parsing ---------- */
+function parseInput(t){
+  const lines=t.split(/\r?\n/).map(l=>l.trim()).filter(Boolean); if(!lines.length) return [];
+  const split=l=>l.split(/[,\t;]/).map(x=>x.trim().replace(/^"|"$/g,""));
+  let idx={m:0,lat:1,lng:2,id:3}, start=0;
+  const first=split(lines[0]);
+  if (!normMac(first[0])){
+    const h=first.map(x=>x.toLowerCase()), f=re=>h.findIndex(x=>re.test(x));
+    idx={m:f(/mac|bssid/), lat:f(/^lat/), lng:f(/^(lng|lon|long)/), id:f(/^(id|c6|group|ref|customer|building|site)/)};
+    if (idx.m<0) throw new Error("Header row has no bssid/mac column.");
+    start=1;
+  }
+  const rows=[], seen=new Set();
+  lines.slice(start).forEach(l=>{
+    const c=split(l), mac=normMac(c[idx.m]); if(!mac||seen.has(mac)) return; seen.add(mac);
+    const la=idx.lat>=0?parseFloat(c[idx.lat]):NaN, lo=idx.lng>=0?parseFloat(c[idx.lng]):NaN;
+    rows.push({mac, id: idx.id>=0 ? (c[idx.id]||"") : "", truth: validLL(la,lo)?{lat:la,lng:lo}:null});
+  });
+  return rows;
+}
+function refreshParseInfo(){
+  try{ const r=parseInput($("#csv").value); $("#parseInfo").textContent = r.length ? `${r.length} unique BSSIDs · ${r.filter(x=>x.truth).length} with ground truth` : ""; }
+  catch(e){ $("#parseInfo").textContent=e.message; }
+}
+
+/* ---------- lookups ---------- */
+const APPLE_GAP_MS=1200;          // ~50 calls/min, under the service's 60/min limit
+let lastApple=0;
+async function appleCall(mac){
+  for (let attempt=0; attempt<3; attempt++){
+    const wait=lastApple+APPLE_GAP_MS-Date.now(); if (wait>0) await sleep(wait);
+    lastApple=Date.now();
+    const res=await fetch("/api/bssid",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({bssid:mac,returnAll:true})});
+    let j=null; try{ j=await res.json(); }catch{}
+    if (res.status===429){ const ra=+res.headers.get("Retry-After")||60; if (ra>120) return {status:429,json:j}; msg("warn",`Rate limited, pausing ${ra}s…`); await sleep(ra*1000); msg(); continue; }
+    return {status:res.status, json:j};
+  }
+  return {status:429, json:null};
+}
+async function appleLookup(mac){
+  const tries=[mac]; if($("#optUniversal").checked && isLocalAdmin(mac)) tries.push(toUniversal(mac));
+  let last=null;
+  for (const t of tries){
+    const r=await appleCall(t); last=r;
+    if (r.status===200 && r.json && r.json.results){
+      const all=r.json.results.map(x=>({mac:normMac(x.bssid), lat:+x.location.latitude, lng:+x.location.longitude, acc:x.accuracy})).filter(x=>x.mac&&validLL(x.lat,x.lng));
+      const p=all.find(x=>x.mac===t);
+      if (p) return {state:"ok", used:t, primary:p, neighbours:all.filter(x=>x.mac!==p.mac).map(x=>({...x,dist:haversine(p,x)})).sort((a,b)=>a.dist-b.dist)};
+      return {state:"miss", msg:"returned neighbours but not this BSSID"};
+    }
+    if (r.status!==404) break;
+  }
+  if (last && last.status===404) return {state:"miss"};
+  const e=last&&last.json&&last.json.error;
+  return {state:"err", msg:(e&&e.message)||("HTTP "+(last?last.status:"?"))};
+}
+async function googleLookup(macs,key){
+  try{
+    const res=await fetch("https://www.googleapis.com/geolocation/v1/geolocate?key="+encodeURIComponent(key),{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({considerIp:false, wifiAccessPoints:macs.map(m=>({macAddress:m}))})});
+    const j=await res.json().catch(()=>null);
+    if (j&&j.location&&validLL(j.location.lat,j.location.lng)) return {state:"ok", lat:j.location.lat, lng:j.location.lng, acc:j.accuracy};
+    const e=j&&j.error, reason=e&&e.errors&&e.errors[0]&&e.errors[0].reason;
+    if (reason==="notFound") return {state:"miss"};
+    return {state:"err", msg:(reason?reason+": ":"")+((e&&e.message)||("HTTP "+res.status)), fatal: res.status===400||res.status===403||res.status===429};
+  }catch(e){ return {state:"err", msg:e.message}; }
+}
+
+/* ---------- run ---------- */
+let rows=[], stopFlag=false, googleCalls=0;
+async function run(){
+  let input; try{ input=parseInput($("#csv").value); }catch(e){ msg("err",e.message); return; }
+  if(!input.length){ msg("err","No valid BSSIDs found."); return; }
+  const key=$("#gkey").value.trim(), useGoogle=$("#optGoogle").checked;
+  if (useGoogle && !key){ msg("err","Enter your Google API key, or untick 'Query Google'."); return; }
+  const n=+$("#nearN").value, maxD=+$("#maxDist").value;
+  rows=input.map((r,i)=>({...r, n:i+1, apple:null, google:null, sent:0})); googleCalls=0; stopFlag=false;
+  $("#runBtn").disabled=true; $("#stopBtn").disabled=false; $("#dlBtn").disabled=true; msg();
+  const etaMin=Math.ceil(rows.length*APPLE_GAP_MS/60000);
+  msg("ok",`Processing ${rows.length} BSSIDs (about ${etaMin} min). Up to ${useGoogle?rows.length:0} Google requests.`);
+  render();
+  for (const r of rows){
+    if (stopFlag) break;
+    r.apple={state:"run"}; render();
+    r.apple=await appleLookup(r.mac);
+    if (useGoogle){
+      if (r.apple.state==="ok"){
+        const nb=r.apple.neighbours.filter(x=>x.dist<=maxD).slice(0,n).map(x=>x.mac);
+        if (nb.length){
+          r.sent=nb.length; r.google={state:"run"}; render();
+          r.google=await googleLookup([r.apple.primary.mac,...nb],key); googleCalls++;
+          if (r.google.fatal){ msg("err","Google stopped the batch: "+r.google.msg); stopFlag=true; }
+        } else r.google={state:"skip", msg:"no neighbours in range"};
+      } else r.google={state:"skip", msg:"not found in Apple"};
+    }
+    render();
+  }
+  $("#runBtn").disabled=false; $("#stopBtn").disabled=true; $("#dlBtn").disabled=false;
+  if (!$("#msg").classList.contains("err")) msg("ok", stopFlag ? "Stopped." : "Done.");
+  render(true);
+}
+
+/* ---------- render ---------- */
+function cell(o){
+  if(!o) return '<span class="st skip">—</span>';
+  const lab={ok:"Found",miss:"Not found",err:"Error",run:"…",skip:"Skipped"}[o.state];
+  return `<span class="st ${o.state}" title="${esc(o.msg||"")}">${lab}</span>`;
+}
+function render(fit){
+  const done=rows.filter(r=>r.apple && r.apple.state!=="run");
+  $("#bar").style.width=rows.length?(100*done.length/rows.length)+"%":"0";
+  $("#progInfo").textContent=rows.length?`${done.length} / ${rows.length} processed · ${googleCalls} Google requests used`:$("#progInfo").textContent;
+  $("#tbody").innerHTML=rows.map(r=>{
+    const a=r.apple&&r.apple.state==="ok"?r.apple.primary:null, g=r.google&&r.google.state==="ok"?r.google:null;
+    return `<tr><td class="num">${r.n}</td><td>${esc(r.id)}</td><td class="num">${r.mac}${r.apple&&r.apple.used&&r.apple.used!==r.mac?`<br><span style="color:var(--muted)">as ${r.apple.used}</span>`:""}</td>
+      <td>${cell(r.apple)}</td><td class="num">${a?gm(a.lat,a.lng):"—"}</td><td class="num">${a?fmtM(a.acc):"—"}</td>
+      <td class="num">${r.sent||"—"}</td><td>${cell(r.google)}</td><td class="num">${g?gm(g.lat,g.lng):"—"}</td><td class="num">${g?fmtM(g.acc):"—"}</td>
+      <td class="num">${a&&g?fmtM(haversine(a,g)):"—"}</td><td class="num">${a&&r.truth?fmtM(haversine(r.truth,a)):"—"}</td><td class="num">${g&&r.truth?fmtM(haversine(r.truth,g)):"—"}</td></tr>`;
+  }).join("");
+  // stats
+  if(!done.length){ $("#stats").innerHTML=""; renderMap(); return; }
+  const aOk=done.filter(r=>r.apple.state==="ok"), gOk=done.filter(r=>r.google&&r.google.state==="ok");
+  const ag=done.filter(r=>r.apple.state==="ok"&&r.google&&r.google.state==="ok").map(r=>haversine(r.apple.primary,r.google));
+  const aErr=aOk.filter(r=>r.truth).map(r=>haversine(r.truth,r.apple.primary)), gErr=gOk.filter(r=>r.truth).map(r=>haversine(r.truth,r.google));
+  const st=[["Processed",`${done.length} / ${rows.length}`],["Apple hit rate",`${aOk.length} · ${pct(aOk.length,done.length)}`],
+    ["Google hit rate (all)",`${gOk.length} · ${pct(gOk.length,done.length)}`],["Google hit rate (when Apple found)",pct(gOk.length,aOk.length)],
+    ["Median Apple↔Google",ag.length?fmtM(median(ag)):"—"],["Google requests used",String(googleCalls)]];
+  if (aErr.length) st.push(["Apple median error",fmtM(median(aErr))],["Apple within 100 m",pct(aErr.filter(e=>e<=100).length,aErr.length)]);
+  if (gErr.length) st.push(["Google median error",fmtM(median(gErr))],["Google within 100 m",pct(gErr.filter(e=>e<=100).length,gErr.length)]);
+  $("#stats").innerHTML=st.map(([k,v])=>`<div class="stat"><div class="k">${esc(k)}</div><div class="v">${esc(v)}</div></div>`).join("");
+  renderMap(fit);
+}
+
+/* ---------- map ---------- */
+let map, layer;
+function initMap(){
+  if(!window.L){ $("#map").innerHTML='<div style="padding:24px;color:var(--muted);text-align:center">Map library could not load. Results above still work.</div>'; return; }
+  map=L.map("map",{scrollWheelZoom:false}).setView([20.6,78.9],4);
+  const sat=L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",{maxZoom:19,attribution:"Tiles &copy; Esri"});
+  const osm=L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"&copy; OpenStreetMap contributors"});
+  osm.addTo(map); L.control.layers({"Streets":osm,"Satellite":sat}).addTo(map);
+  layer=L.layerGroup().addTo(map);
+}
+function renderMap(fit){
+  if(!map) return; layer.clearLayers(); const pts=[];
+  rows.forEach(r=>{
+    const label=esc(r.id?r.id+" · "+r.mac:r.mac);
+    if (r.apple&&r.apple.state==="ok"){ const p=r.apple.primary; pts.push([p.lat,p.lng]);
+      L.circleMarker([p.lat,p.lng],{radius:6,color:"#fff",weight:1,fillColor:"#e53935",fillOpacity:1}).bindPopup("Apple<br>"+label).addTo(layer); }
+    if (r.google&&r.google.state==="ok"){ const g=r.google; pts.push([g.lat,g.lng]);
+      L.circleMarker([g.lat,g.lng],{radius:6,color:"#fff",weight:1,fillColor:"#1e88e5",fillOpacity:1}).bindPopup("Google<br>"+label).addTo(layer); }
+    if (r.truth){ pts.push([r.truth.lat,r.truth.lng]);
+      L.circleMarker([r.truth.lat,r.truth.lng],{radius:5,color:"#fff",weight:1,fillColor:"#2e7d32",fillOpacity:1}).bindPopup("Ground truth<br>"+label).addTo(layer); }
+  });
+  if (fit && pts.length) pts.length===1?map.setView(pts[0],17):map.fitBounds(pts,{padding:[30,30],maxZoom:18});
+}
+
+/* ---------- CSV export ---------- */
+function download(){
+  const q=v=>{v=v==null?"":String(v);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;};
+  const head=["n","id","bssid","apple_status","apple_bssid_used","apple_lat","apple_lng","apple_acc_m","neighbours_sent","google_status","google_lat","google_lng","google_acc_m","apple_google_dist_m","truth_lat","truth_lng","apple_error_m","google_error_m","note"];
+  const out=[head.join(",")].concat(rows.map(r=>{
+    const a=r.apple&&r.apple.state==="ok"?r.apple.primary:null, g=r.google&&r.google.state==="ok"?r.google:null;
+    return [r.n,r.id,r.mac,r.apple?r.apple.state:"",r.apple&&r.apple.used||"",a?a.lat:"",a?a.lng:"",a&&a.acc!=null?Math.round(a.acc):"",r.sent||"",
+      r.google?r.google.state:"",g?g.lat:"",g?g.lng:"",g&&g.acc!=null?Math.round(g.acc):"",a&&g?Math.round(haversine(a,g)):"",
+      r.truth?r.truth.lat:"",r.truth?r.truth.lng:"",a&&r.truth?Math.round(haversine(r.truth,a)):"",g&&r.truth?Math.round(haversine(r.truth,g)):"",
+      [r.apple&&r.apple.msg,r.google&&r.google.msg].filter(Boolean).join("; ")].map(q).join(",");
+  }));
+  const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([out.join("\n")],{type:"text/csv"}));
+  a.download="bssid-batch-results.csv"; document.body.appendChild(a); a.click(); a.remove();
+}
+
+/* ---------- wiring ---------- */
+$("#runBtn").onclick=run;
+$("#stopBtn").onclick=()=>{ stopFlag=true; $("#stopBtn").disabled=true; };
+$("#dlBtn").onclick=download;
+$("#csv").addEventListener("input",refreshParseInfo);
+$("#file").onchange=e=>{ const f=e.target.files[0]; if(!f) return; const rd=new FileReader(); rd.onload=()=>{ $("#csv").value=rd.result; refreshParseInfo(); }; rd.readAsText(f); };
+initMap();
+</script>
+</body>
+</html>
