@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Neighbour Locator</title>
+<title>BSSID Locator</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <style>
@@ -60,27 +60,23 @@ code{font-family:var(--mono);font-size:12px}
 </head>
 <body>
 <header>
-  <h1>Neighbour Locator</h1>
-  <p>Look up one BSSID in your WaveDigger instance (Apple data) with its neighbours, then send the primary + chosen neighbours to Google.</p>
+  <h1>BSSID Locator</h1>
 </header>
 <main>
   <div class="grid">
     <section class="panel">
-      <h2><span class="step">1</span>Apple lookup via WaveDigger</h2>
+      <h2><span class="step">1</span>Apple lookup &gt; Primary BSSID</h2>
       <div class="row">
         <div><label for="bssid">Primary BSSID</label><input id="bssid" class="mono" placeholder="54:3D:60:E0:78:4D" spellcheck="false"></div>
         <button class="primary" id="lookupBtn">Look up</button>
       </div>
       <div class="inline"><input type="checkbox" id="optUniversal" checked><label for="optUniversal" style="color:var(--ink)">If not found and locally administered, retry the manufacturer-assigned form</label></div>
-      <div class="row">
-        <div><label for="wdBase">WaveDigger base URL (blank = this server)</label><input id="wdBase" class="mono" placeholder="http://localhost:3000"></div>
-      </div>
       <div id="appleMsg" class="msg"></div>
       <div class="stats" id="appleStats"></div>
     </section>
 
     <section class="panel">
-      <h2><span class="step">2</span>Google with primary + neighbours</h2>
+      <h2><span class="step">2</span>Google lookup &gt; Primary + Neighbour BSSID</h2>
       <div class="row">
         <div><label for="gkey">Google Geolocation API key (kept in this tab only)</label><input id="gkey" class="mono" type="password" autocomplete="off" spellcheck="false"></div>
       </div>
@@ -138,10 +134,9 @@ const gmaps=(lat,lng)=>`<a href="https://www.google.com/maps?q=${lat},${lng}" ta
 
 let state={primary:null, neighbours:[], selected:new Set(), google:null};
 
-/* ---------- step 1: WaveDigger ---------- */
+/* ---------- step 1: Apple lookup ---------- */
 async function wdQuery(mac){
-  const base=$("#wdBase").value.trim().replace(/\/$/,"");
-  const res=await fetch(base+"/api/bssid",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({bssid:mac,returnAll:true})});
+  const res=await fetch("/api/bssid",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({bssid:mac,returnAll:true})});
   let j=null; try{ j=await res.json(); }catch{}
   return {status:res.status, json:j};
 }
@@ -157,8 +152,8 @@ async function lookup(){
     if(!hit){
       const e=last&&last.json&&last.json.error;
       if(last&&last.status===404) msg("#appleMsg","warn","Not in Apple's database"+(tries.length>1?" (tried "+tries.join(" and ")+")":"")+".");
-      else if(last&&last.status===403) msg("#appleMsg","err","WaveDigger refused the request (403). Open this page from your own WaveDigger instance, e.g. http://localhost:3000/apple-neighbour-locator.html.");
-      else msg("#appleMsg","err",(e&&e.message)||("WaveDigger returned HTTP "+(last?last.status:"?")));
+      else if(last&&last.status===403) msg("#appleMsg","err","The lookup service refused the request (403). Reload this page and try again.");
+      else msg("#appleMsg","err",(e&&e.message)||("Lookup service returned HTTP "+(last?last.status:"?")));
       return;
     }
     const all=hit.map(r=>({mac:normMac(r.bssid), lat:+r.location.latitude, lng:+r.location.longitude, acc:r.accuracy})).filter(r=>r.mac&&isFinite(r.lat)&&isFinite(r.lng));
@@ -170,7 +165,7 @@ async function lookup(){
     stats("#appleStats",[["Apple location",gmaps(p.lat,p.lng)],["Accuracy",fmtM(p.acc)],["Neighbours",String(state.neighbours.length)],["Nearest neighbour",state.neighbours[0]?fmtM(state.neighbours[0].dist):"—"]]);
     selectNearest(); $("#selNearBtn").disabled=false;
   }catch(e){
-    msg("#appleMsg","err","Could not reach WaveDigger ("+e.message+"). Is your instance running, and is this page served from it?");
+    msg("#appleMsg","err","Could not reach the lookup service ("+e.message+"). Reload and try again.");
   }finally{ $("#lookupBtn").disabled=false; renderTable(); renderMap(true); updateGoogleBtn(); }
 }
 function selectNearest(){
