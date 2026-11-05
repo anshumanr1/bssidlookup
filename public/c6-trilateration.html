@@ -1,0 +1,408 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Multi-A6 trilateration (POC)</title>
+<style>
+:root{
+  color-scheme: light;
+  --paper:#F6F8FB; --panel:#FFFFFF; --ink:#0B1F4B; --ink2:#4A5873; --line:#D8DFEA; --soft:#EEF2F8;
+  --signal:#1446D9; --pass:#0E7C6F; --fail:#B73636; --watch:#9A6200;
+  --pass-bg:#E3F3F0; --fail-bg:#F9E6E6; --watch-bg:#FBF0DC; --na-bg:#EEF1F5;
+  --display:"Bahnschrift","DIN Alternate","Segoe UI",system-ui,sans-serif;
+  --body:"Segoe UI",system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.5 var(--body)}
+h1,h2,h3{font-family:var(--display);font-weight:600;margin:0;letter-spacing:.2px}
+h1{font-size:30px;line-height:1.15} h2{font-size:21px;margin-bottom:6px} h3{font-size:16px;margin-bottom:6px}
+p{margin:0 0 10px;max-width:72ch}
+.wrap{max-width:1360px;margin:0 auto;padding:24px 28px 48px}
+.top{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;flex-wrap:wrap;margin-bottom:20px}
+.top p{color:var(--ink2);margin:6px 0 0}
+.btn{font:600 14px var(--body);border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:8px 14px;border-radius:6px;cursor:pointer}
+.btn:hover{border-color:var(--signal)} .btn.primary{background:var(--signal);border-color:var(--signal);color:#fff}
+.btn.small{padding:4px 10px;font-size:13px}
+:focus-visible{outline:3px solid #7FA2FF;outline-offset:2px}
+.tabs{display:flex;gap:4px;border-bottom:2px solid var(--line);flex-wrap:wrap}
+.tab{font:600 15px var(--display);background:none;border:none;padding:10px 16px 9px;color:var(--ink2);cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px}
+.tab[aria-selected=true]{color:var(--ink);border-bottom-color:var(--signal)}
+.panel{padding-top:18px} .panel[hidden]{display:none}
+.layout{display:grid;grid-template-columns:minmax(0,1fr) 440px;gap:24px;align-items:start}
+fieldset{border:1px solid var(--line);background:var(--panel);border-radius:10px;padding:16px 18px 18px;margin:0 0 18px}
+legend{font:600 16px var(--display);padding:0 6px}
+.hint{color:var(--ink2);font-size:13px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px 16px}
+label{display:block;font-size:13px;font-weight:600}
+label small{display:block;font-weight:400;color:var(--ink2)}
+input[type=number],input[type=text]{width:100%;margin-top:4px;padding:7px 9px;border:1px solid var(--line);border-radius:6px;font:15px var(--body);font-variant-numeric:tabular-nums;color:var(--ink);background:#fff}
+input:focus{border-color:var(--signal)}
+.explain{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:4px 18px;margin-bottom:18px}
+.explain summary{cursor:pointer;font:600 16px var(--display);padding:12px 0}
+.explain ol{padding-left:20px;margin:0 0 12px} .explain li{margin-bottom:8px;max-width:80ch}
+.formula{font-family:Consolas,"Cascadia Mono",monospace;font-size:13.5px;background:var(--soft);border-radius:6px;padding:8px 10px;margin:6px 0;white-space:pre-wrap}
+.a6wrap{overflow:auto}
+table.a6{border-collapse:collapse;width:100%;font-size:13.5px;font-variant-numeric:tabular-nums}
+table.a6 th{text-align:left;font-weight:600;padding:6px 6px;border-bottom:2px solid var(--line);white-space:nowrap;vertical-align:bottom}
+table.a6 th small{display:block;font-weight:400;color:var(--ink2)}
+table.a6 td{padding:4px 6px;border-bottom:1px solid var(--soft)}
+table.a6 td input{margin:0;padding:5px 6px;font-size:14px;min-width:70px}
+table.a6 td.calc{white-space:nowrap;color:var(--ink2);text-align:right}
+table.a6 td.calc b{color:var(--ink)}
+.src{font-size:12px;padding:1px 7px;border-radius:999px;background:var(--soft);color:var(--ink2)}
+.src.rng{background:#E6EDFF;color:var(--signal)}
+aside{position:sticky;top:16px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin-bottom:16px}
+.verdict{border-width:2px}
+.verdict.good{border-color:var(--pass);background:var(--pass-bg)}
+.verdict.low{border-color:var(--watch);background:var(--watch-bg)}
+.verdict.none{background:var(--na-bg)}
+.verdict .next{margin-top:8px;font-weight:600}
+.kv{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;margin-top:8px}
+.kv td{padding:6px 0;border-bottom:1px solid var(--soft)} .kv td:last-child{text-align:right;font-weight:600}
+.kv tr:last-child td{border-bottom:none}
+.legend{display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;font-size:13px;color:var(--ink2);margin-top:8px}
+.legend i{display:inline-block;width:12px;height:12px;margin-right:6px;vertical-align:-1px}
+.batchbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:12px 0}
+.drop{border:2px dashed var(--line);border-radius:10px;padding:18px;text-align:center;color:var(--ink2);margin:12px 0;background:var(--panel)}
+.drop.over{border-color:var(--signal);background:#F0F4FF}
+.summary{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0} .summary div{border-radius:8px;padding:8px 14px;font-weight:600}
+.tablewrap{overflow:auto;max-height:520px;border:1px solid var(--line);border-radius:8px;background:var(--panel)}
+table.res{border-collapse:collapse;width:100%;font-size:13.5px;font-variant-numeric:tabular-nums}
+table.res th{position:sticky;top:0;background:var(--ink);color:#fff;text-align:left;padding:8px 10px;font-weight:600;white-space:nowrap}
+table.res td{padding:7px 10px;border-bottom:1px solid var(--soft);white-space:nowrap}
+.pill{padding:1px 8px;border-radius:999px;font-weight:700;font-size:12px;color:#fff}
+.pill.good{background:var(--pass)} .pill.low{background:var(--watch)} .pill.none{background:#8A95A8} .pill.bad{background:var(--fail)}
+.cols-table{font-size:13.5px;border-collapse:collapse;width:100%} .cols-table td{border-bottom:1px solid var(--soft);padding:5px 8px;vertical-align:top}
+.cols-table code{font-family:Consolas,monospace;font-size:13px;color:var(--signal)}
+.err{color:var(--fail);font-weight:600}
+footer{margin-top:28px;color:var(--ink2);font-size:13px;max-width:100ch}
+@media (max-width:1100px){.layout{grid-template-columns:1fr}aside{position:static}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="top">
+  <div>
+    <h1>Multi-A6 trilateration</h1>
+    <p>Estimates where a suspect C6 actually is, from the signal levels it hears from several nearby A6s. Use it on C6s that failed the screening tests, then snap the estimate to a GIS building.</p>
+  </div>
+  <div style="display:flex;gap:8px">
+    <button class="btn" id="loadExample" type="button">Load example</button>
+    <button class="btn" id="clearAll" type="button">Clear inputs</button>
+  </div>
+</header>
+
+<details class="explain">
+  <summary>How the estimate is made</summary>
+  <ol>
+    <li><strong>Collect a site survey from the C6.</strong> The C6 scans and lists every A6 it can hear with the received signal level (RSSI), without leaving its own A6. A6 positions and transmit settings come from our inventory.</li>
+    <li><strong>Turn each signal level into a distance</strong> with a log-distance path-loss model. With exponent n = 2 this is free space (ITU-R P.525). Real environments lose more, so n is usually set higher and calibrated in the pilot.
+      <div class="formula">Path loss = Tx power + A6 gain + C6 gain − losses − RSSI
+Distance (m) = 10 ^ ((Path loss − FSPL at 1 m) ÷ (10 × n))
+FSPL at 1 m = 20·log10(f MHz) − 27.56</div></li>
+    <li><strong>Weight each distance by how much to trust it.</strong> Signal level fluctuates (the shadowing spread, in dB), and the same dB error means more metres at longer range. Each distance therefore gets an uncertainty that grows with distance. If the serving A6 reports a measured link distance (ranging), that row uses the ranging value and its much smaller uncertainty instead.
+      <div class="formula">σ (m) = distance × ln(10) ÷ (10 × n) × shadowing σ (dB)</div></li>
+    <li><strong>Find the best-fit point.</strong> Weighted least squares (Gauss–Newton) finds the point whose distances to the A6s best match the estimated distances. It needs at least three A6s; with two, the circles cross at two points.</li>
+    <li><strong>Judge the result.</strong> The error radius comes from the fit. Geometry is good when the A6s surround the C6 (no angular gap of 180° or more as seen from the estimate) and poor when they all sit on one side. Finally, the estimate is compared with the recorded location.</li>
+  </ol>
+</details>
+
+<div class="tabs" role="tablist" aria-label="Mode">
+  <button class="tab" role="tab" id="t-single" aria-controls="p-single" aria-selected="true">Single C6</button>
+  <button class="tab" role="tab" id="t-batch" aria-controls="p-batch" aria-selected="false" tabindex="-1">Batch CSV</button>
+</div>
+
+<div class="panel" role="tabpanel" id="p-single" aria-labelledby="t-single">
+<div class="layout">
+<section>
+  <fieldset>
+    <legend>Model settings</legend>
+    <div class="grid">
+      <label>Frequency (MHz)<input type="number" step="any" id="freq" value="5800"></label>
+      <label>C6 antenna gain (dBi)<input type="number" step="any" id="gc" value="23"></label>
+      <label>Path-loss exponent n<small>2 = free space; calibrate</small><input type="number" step="any" id="nexp" value="2"></label>
+      <label>Shadowing σ (dB)<small>Assumption; calibrate</small><input type="number" step="any" id="sdb" value="6"></label>
+      <label>Ranging σ (m)<small>Assumption; ask vendor</small><input type="number" step="any" id="srng" value="20"></label>
+      <label>Usable if error radius below (m)<small>Assumption; set for GIS snap</small><input type="number" step="any" id="maxErr" value="150"></label>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>C6 under test</legend>
+    <div class="grid">
+      <label>C6 ID<input type="text" id="c6id" placeholder="e.g. C6-000777"></label>
+      <label>Recorded latitude<small>Optional, for comparison</small><input type="number" step="any" id="rlat"></label>
+      <label>Recorded longitude<small>Optional, for comparison</small><input type="number" step="any" id="rlon"></label>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>A6s heard by this C6 (site survey)</legend>
+    <p class="hint">One row per A6. Fill either the signal inputs (Tx power, A6 gain, losses, RSSI), or the ranging distance if this is the serving A6 and the NMS reports it. Untick a row to leave it out of the fit.</p>
+    <div class="a6wrap">
+      <table class="a6" id="a6table">
+        <thead><tr>
+          <th>Use</th><th>A6 ID</th><th>Latitude</th><th>Longitude</th>
+          <th>Tx power<small>dBm</small></th><th>A6 gain<small>dBi</small></th><th>Losses<small>dB</small></th><th>RSSI at C6<small>dBm</small></th><th>Ranging<small>m, optional</small></th>
+          <th>Est. distance</th><th>± σ</th><th>Fit residual</th><th></th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div style="margin-top:10px"><button class="btn small" type="button" id="addRow">Add A6</button></div>
+  </fieldset>
+</section>
+
+<aside>
+  <div class="card verdict none" id="verdict">
+    <h2 id="vTitle">Add at least three A6s</h2>
+    <div id="vBody" class="hint">The estimate appears here as soon as three usable A6 rows are filled in.</div>
+  </div>
+  <div class="card">
+    <h3>Map view</h3>
+    <svg id="plot" viewBox="0 0 420 420" width="100%" role="img" aria-label="Plot of A6 positions, estimated distance circles, the estimated C6 location and the recorded location"></svg>
+    <div class="legend">
+      <span><i style="background:#0B1F4B;clip-path:polygon(50% 0,100% 100%,0 100%)"></i>A6</span>
+      <span><i style="border:1.5px solid #1446D9;border-radius:50%"></i>Distance circle</span>
+      <span><i style="background:#0E7C6F;border-radius:50%"></i>Estimated C6</span>
+      <span><i style="background:rgba(14,124,111,.18);border:1px solid #0E7C6F;border-radius:50%"></i>Uncertainty (2σ)</span>
+      <span><i style="background:#B73636;border-radius:50%"></i>Recorded location</span>
+    </div>
+  </div>
+</aside>
+</div>
+</div>
+
+<div class="panel" role="tabpanel" id="p-batch" aria-labelledby="t-batch" hidden>
+  <div class="card">
+    <h3>Estimate many C6s at once</h3>
+    <p>Upload a CSV with one row per C6–A6 pair (a C6 that hears four A6s has four rows). Rows are grouped by <code>c6_id</code>. Each C6 is solved using the model settings on the Single C6 tab.</p>
+    <div class="batchbar">
+      <button class="btn" type="button" id="dlTemplate">Download CSV template</button>
+      <label class="btn primary" for="csvFile" style="display:inline-block">Choose CSV file</label>
+      <input type="file" id="csvFile" accept=".csv,text/csv" style="position:absolute;left:-9999px">
+      <button class="btn" type="button" id="dlResults" disabled>Download results</button>
+    </div>
+    <div class="drop" id="drop">Or drop a CSV file here</div>
+    <div id="batchMsg" class="hint"></div>
+    <div class="summary" id="summary"></div>
+    <div class="tablewrap" id="resWrap" hidden><table class="res" id="resTable"></table></div>
+    <details style="margin-top:16px">
+      <summary><strong>CSV columns</strong></summary>
+      <table class="cols-table" style="margin-top:8px">
+        <tr><td><code>c6_id</code>, <code>a6_id</code></td><td>Identifiers; one row per A6 heard</td></tr>
+        <tr><td><code>a6_lat</code>, <code>a6_lon</code></td><td>A6 position (decimal degrees)</td></tr>
+        <tr><td><code>tx_power_dbm</code>, <code>a6_gain_dbi</code>, <code>other_loss_db</code>, <code>rssi_dbm</code></td><td>Signal inputs from the C6 site survey</td></tr>
+        <tr><td><code>ranging_distance_m</code></td><td>Optional; serving A6 link distance from NMS</td></tr>
+        <tr><td><code>c6_db_lat</code>, <code>c6_db_lon</code></td><td>Optional; recorded location, for comparison</td></tr>
+      </table>
+    </details>
+  </div>
+</div>
+
+<footer>
+  Method note: distances use a log-distance path-loss model anchored to free-space loss (ITU-R P.525) and a local flat-Earth projection, which is adequate over a few kilometres. The error radius is an approximate 1σ value from the least-squares fit, scaled up when residuals exceed the assumed noise. Default settings are starting assumptions, not vendor or measured values: calibrate n and σ against field-verified C6s in the pilot. Example values are illustrative only.
+</footer>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+const R=6371008.8, rad=d=>d*Math.PI/180, deg=r=>r*180/Math.PI;
+function hav(a1,o1,a2,o2){const p1=rad(a1),p2=rad(a2),dp=rad(a2-a1),dl=rad(o2-o1);const h=Math.sin(dp/2)**2+Math.cos(p1)*Math.cos(p2)*Math.sin(dl/2)**2;return 2*R*Math.asin(Math.min(1,Math.sqrt(h)));}
+const F=(n,d=0)=>Number.isFinite(n)?n.toLocaleString('en-IN',{minimumFractionDigits:d,maximumFractionDigits:d}):'–';
+const num=v=>{if(v===undefined||v===null)return NaN;v=String(v).trim();return v===''?NaN:Number(v);};
+const val=id=>num($(id).value);
+const fin=(...a)=>a.every(Number.isFinite);
+function settings(){return{f:val('freq'),gc:val('gc'),n:val('nexp'),sdb:val('sdb'),srng:val('srng'),maxErr:val('maxErr')};}
+
+// ---------- Solver ----------
+function solve(a6s,rec,s){
+  const res={rows:a6s.map(a=>({...a}))};
+  if(!fin(s.f,s.n,s.sdb)||s.f<=0||s.n<=0){res.error='Model settings incomplete: frequency, exponent n and shadowing σ are required.';return res;}
+  const fspl1=20*Math.log10(s.f)-27.56;
+  res.rows.forEach(r=>{
+    r.ok=false;
+    if(r.use===false||!fin(r.lat,r.lon))return;
+    if(Number.isFinite(r.rng)&&r.rng>0){r.d=r.rng;r.sig=Number.isFinite(s.srng)&&s.srng>0?s.srng:20;r.src='ranging';r.ok=true;}
+    else if(fin(r.tx,r.ga,r.rssi)&&Number.isFinite(s.gc)){const pl=r.tx+r.ga+s.gc-(Number.isFinite(r.loss)?r.loss:0)-r.rssi;r.d=Math.pow(10,(pl-fspl1)/(10*s.n));r.sig=Math.max(1,r.d*Math.LN10/(10*s.n)*s.sdb);r.src='rssi';r.ok=true;}
+  });
+  const U=res.rows.filter(r=>r.ok);
+  res.n=U.length;
+  if(U.length<3){res.error=U.length===0?'No usable A6 rows yet.':`Only ${U.length} usable A6 row${U.length>1?'s':''}. At least three are needed: with two, the distance circles cross at two points.`;return res;}
+  const lat0=U.reduce((a,r)=>a+r.lat,0)/U.length, lon0=U.reduce((a,r)=>a+r.lon,0)/U.length, k=R*Math.PI/180, cl=Math.cos(rad(lat0));
+  const xy=(la,lo)=>[(lo-lon0)*k*cl,(la-lat0)*k], ll=(x,y)=>[lat0+y/k,lon0+x/(k*cl)];
+  res.proj={xy,ll};
+  U.forEach(r=>{[r.x,r.y]=xy(r.lat,r.lon);r.w=1/(r.sig*r.sig);});
+  // initial guess: weighted centroid (closer A6s weigh more)
+  let sw=0,px=0,py=0;U.forEach(r=>{const w=1/Math.max(r.d,1);px+=w*r.x;py+=w*r.y;sw+=w;});px/=sw;py/=sw;
+  const cost=(x,y)=>U.reduce((a,r)=>{const e=Math.hypot(x-r.x,y-r.y)-r.d;return a+r.w*e*e;},0);
+  let lam=1e-3,c=cost(px,py);
+  for(let it=0;it<200;it++){
+    let a00=0,a01=0,a11=0,g0=0,g1=0;
+    U.forEach(r=>{const dx=px-r.x,dy=py-r.y,rr=Math.max(Math.hypot(dx,dy),1e-6),jx=dx/rr,jy=dy/rr,e=rr-r.d;a00+=r.w*jx*jx;a01+=r.w*jx*jy;a11+=r.w*jy*jy;g0+=r.w*jx*e;g1+=r.w*jy*e;});
+    const b00=a00*(1+lam),b11=a11*(1+lam),det=b00*b11-a01*a01;if(!(Math.abs(det)>1e-18))break;
+    const dx=-(b11*g0-a01*g1)/det, dy=-(-a01*g0+b00*g1)/det;
+    const nc=cost(px+dx,py+dy);
+    if(nc<c){px+=dx;py+=dy;c=nc;lam=Math.max(lam/3,1e-9);if(Math.hypot(dx,dy)<0.01)break;}else{lam*=5;if(lam>1e8)break;}
+  }
+  // covariance
+  let a00=0,a01=0,a11=0;
+  U.forEach(r=>{const dx=px-r.x,dy=py-r.y,rr=Math.max(Math.hypot(dx,dy),1e-6),jx=dx/rr,jy=dy/rr;a00+=r.w*jx*jx;a01+=r.w*jx*jy;a11+=r.w*jy*jy;r.fitD=rr;r.resid=rr-r.d;});
+  const det=a00*a11-a01*a01;
+  const dof=U.length-2, chi2=c, scale=dof>0?Math.max(1,chi2/dof):1;
+  let c00=Infinity,c11=Infinity,c01=0;
+  if(det>1e-18){c00=a11/det*scale;c11=a00/det*scale;c01=-a01/det*scale;}
+  res.x=px;res.y=py;[res.lat,res.lon]=ll(px,py);
+  res.errR=Math.sqrt(c00+c11);
+  const tr=c00+c11,dd=Math.sqrt(Math.max(0,((c00-c11)/2)**2+c01*c01));
+  res.ell={a:Math.sqrt(Math.max(0,tr/2+dd)),b:Math.sqrt(Math.max(0,tr/2-dd)),ang:0.5*Math.atan2(2*c01,c00-c11)};
+  res.rms=Math.sqrt(U.reduce((a,r)=>a+r.resid*r.resid,0)/U.length);
+  // geometry: largest angular gap of A6 bearings seen from the estimate
+  const brg=U.map(r=>(deg(Math.atan2(r.x-px,r.y-py))+360)%360).sort((a,b)=>a-b);
+  let gap=0;for(let i=0;i<brg.length;i++){const g=(i===brg.length-1?brg[0]+360:brg[i+1])-brg[i];gap=Math.max(gap,g);}
+  res.gap=gap;res.geom=gap<180?'Good':gap<270?'Fair':'Poor';
+  // recorded comparison
+  if(rec&&fin(rec.lat,rec.lon)){res.recD=hav(res.lat,res.lon,rec.lat,rec.lon);[res.recX,res.recY]=xy(rec.lat,rec.lon);res.recBad=res.recD>2*res.errR;}
+  const maxE=Number.isFinite(s.maxErr)?s.maxErr:Infinity;
+  res.status=(res.geom==='Poor'||!(res.errR<=maxE))?'low':'good';
+  return res;
+}
+
+// ---------- Single-C6 UI ----------
+const COLS=['use','id','lat','lon','tx','ga','loss','rssi','rng'];
+function addRow(d={}){
+  const tr=document.createElement('tr');
+  tr.innerHTML=`<td><input type="checkbox" data-k="use" ${d.use===false?'':'checked'} aria-label="Use this A6"></td>
+  <td><input type="text" data-k="id" value="${d.id||''}" aria-label="A6 ID"></td>
+  ${['lat','lon','tx','ga','loss','rssi','rng'].map(k=>`<td><input type="number" step="any" data-k="${k}" value="${d[k]??''}" aria-label="${k}"></td>`).join('')}
+  <td class="calc" data-o="d">–</td><td class="calc" data-o="sig">–</td><td class="calc" data-o="res">–</td>
+  <td><button class="btn small" type="button" aria-label="Remove row">Remove</button></td>`;
+  tr.querySelector('button').onclick=()=>{tr.remove();render();};
+  tr.querySelectorAll('input').forEach(i=>i.addEventListener('input',render));
+  $('a6table').tBodies[0].appendChild(tr);
+}
+function readRows(){return [...$('a6table').tBodies[0].rows].map(tr=>{const g=k=>tr.querySelector(`[data-k=${k}]`);return{use:g('use').checked,id:g('id').value.trim(),lat:num(g('lat').value),lon:num(g('lon').value),tx:num(g('tx').value),ga:num(g('ga').value),loss:num(g('loss').value),rssi:num(g('rssi').value),rng:num(g('rng').value)};});}
+
+function render(){
+  const s=settings(), rows=readRows(), rec={lat:val('rlat'),lon:val('rlon')};
+  const res=solve(rows,rec,s);
+  const trs=[...$('a6table').tBodies[0].rows];
+  res.rows.forEach((r,i)=>{const t=trs[i],o=k=>t.querySelector(`[data-o=${k}]`);
+    o('d').innerHTML=r.ok?`<b>${F(r.d)} m</b> <span class="src ${r.src==='ranging'?'rng':''}">${r.src==='ranging'?'ranging':'RSSI'}</span>`:'–';
+    o('sig').textContent=r.ok?F(r.sig)+' m':'–';
+    o('res').textContent=r.ok&&Number.isFinite(r.resid)?(r.resid>0?'+':'')+F(r.resid)+' m':'–';});
+  const v=$('verdict'),name=$('c6id').value.trim()||'This C6';
+  if(res.error){v.className='card verdict none';$('vTitle').textContent='Not enough data yet';$('vBody').innerHTML=`<p class="hint" style="margin:6px 0 0">${res.error}</p>`;}
+  else{
+    v.className='card verdict '+res.status;
+    $('vTitle').textContent=res.status==='good'?`${name}: usable estimate`:`${name}: low-confidence estimate`;
+    const recRow=Number.isFinite(res.recD)?`<tr><td>Recorded location is</td><td>${F(res.recD)} m away</td></tr><tr><td>Recorded location check</td><td>${res.recBad?'<span style="color:var(--fail)">Inconsistent (beyond 2σ)</span>':'<span style="color:var(--pass)">Consistent (within 2σ)</span>'}</td></tr>`:'';
+    const why=[];if(res.geom==='Poor')why.push('the A6s are all on one side of the C6');if(!(res.errR<=s.maxErr))why.push(`the error radius is above ${F(s.maxErr)} m`);
+    $('vBody').innerHTML=`<table class="kv">
+      <tr><td>Estimated position</td><td>${F(res.lat,6)}, ${F(res.lon,6)}</td></tr>
+      <tr><td>Error radius (≈1σ)</td><td>± ${F(res.errR)} m</td></tr>
+      <tr><td>Geometry</td><td>${res.geom} (largest gap ${F(res.gap)}°)</td></tr>
+      <tr><td>A6s used</td><td>${res.n}</td></tr>
+      <tr><td>RMS fit residual</td><td>${F(res.rms)} m</td></tr>${recRow}</table>
+      <div class="next">${res.status==='good'?'Next: snap this position to the nearest GIS building and update the C6 record.':'Next: '+(why.length?'confidence is low because '+why.join(' and ')+'. ':'')+'Add more A6s if possible, or use the MyJio route or a field audit.'}</div>
+      <div style="margin-top:10px"><button class="btn small" type="button" id="copyPos">Copy coordinates</button> <span id="copied" class="hint"></span></div>`;
+    $('copyPos').onclick=()=>{const t=`${res.lat.toFixed(6)}, ${res.lon.toFixed(6)}`;(navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(()=>$('copied').textContent='Copied',()=>{$('copied').textContent=t;});};
+  }
+  plot(res);
+}
+
+function plot(res){
+  const svg=$('plot'),W=420,P=30;let h='';
+  const U=res.rows.filter(r=>r.ok);
+  if(!res.proj||!U.length){svg.innerHTML=`<text x="210" y="210" font-size="13" text-anchor="middle" fill="#8A95A8">${res.error?'Plot appears with three usable A6s':'Enter A6 data to plot'}</text>`;return;}
+  const pts=U.map(r=>[r.x,r.y]);pts.push([res.x,res.y]);if(Number.isFinite(res.recX))pts.push([res.recX,res.recY]);
+  let x0=Math.min(...pts.map(p=>p[0])),x1=Math.max(...pts.map(p=>p[0])),y0=Math.min(...pts.map(p=>p[1])),y1=Math.max(...pts.map(p=>p[1]));
+  let span=Math.max(x1-x0,y1-y0,300)*1.3;const cx=(x0+x1)/2,cy=(y0+y1)/2;
+  const sc=(W-2*P)/span, X=x=>W/2+(x-cx)*sc, Y=y=>W/2-(y-cy)*sc;
+  h+=`<defs><clipPath id="clip"><rect x="0" y="0" width="${W}" height="${W}" rx="6"/></clipPath></defs><rect x="0" y="0" width="${W}" height="${W}" rx="6" fill="#FAFBFD" stroke="#E3E8F0"/>`;
+  h+='<g clip-path="url(#clip)">';
+  U.forEach(r=>{h+=`<circle cx="${X(r.x)}" cy="${Y(r.y)}" r="${r.d*sc}" fill="none" stroke="${r.src==='ranging'?'#1446D9':'#7FA2FF'}" stroke-width="${r.src==='ranging'?2:1.4}" ${r.src==='ranging'?'':'stroke-dasharray="5 4"'}/>`;});
+  if(Number.isFinite(res.ell.a)&&res.ell.a*sc<W*2){h+=`<ellipse cx="${X(res.x)}" cy="${Y(res.y)}" rx="${Math.max(2*res.ell.a*sc,3)}" ry="${Math.max(2*res.ell.b*sc,3)}" transform="rotate(${-deg(res.ell.ang)} ${X(res.x)} ${Y(res.y)})" fill="rgba(14,124,111,.18)" stroke="#0E7C6F"/>`;}
+  if(Number.isFinite(res.recX)){h+=`<line x1="${X(res.x)}" y1="${Y(res.y)}" x2="${X(res.recX)}" y2="${Y(res.recY)}" stroke="#B73636" stroke-dasharray="3 3"/><circle cx="${X(res.recX)}" cy="${Y(res.recY)}" r="6" fill="#B73636" stroke="#fff" stroke-width="1.5"/><text x="${X(res.recX)+9}" y="${Y(res.recY)+4}" font-size="11" fill="#B73636">Recorded</text>`;}
+  U.forEach(r=>{const x=X(r.x),y=Y(r.y);h+=`<polygon points="${x},${y-8} ${x-7},${y+6} ${x+7},${y+6}" fill="#0B1F4B"/><text x="${x}" y="${y+19}" font-size="11" text-anchor="middle" fill="#0B1F4B">${r.id||'A6'}</text>`;});
+  h+=`<circle cx="${X(res.x)}" cy="${Y(res.y)}" r="6" fill="#0E7C6F" stroke="#fff" stroke-width="1.5"/><text x="${X(res.x)+9}" y="${Y(res.y)-8}" font-size="11" font-weight="600" fill="#0E7C6F">Estimate</text>`;
+  h+='</g>';
+  // scale bar + north
+  const nice=v=>{const p=Math.pow(10,Math.floor(Math.log10(v)));const m=v/p;return (m<1.5?1:m<3.5?2:m<7.5?5:10)*p;};
+  const sb=nice(span/4),len=sb*sc;
+  h+=`<line x1="${P}" y1="${W-16}" x2="${P+len}" y2="${W-16}" stroke="#4A5873" stroke-width="2"/><text x="${P+len/2}" y="${W-22}" font-size="11" text-anchor="middle" fill="#4A5873">${sb>=1000?F(sb/1000,1)+' km':F(sb)+' m'}</text>`;
+  h+=`<line x1="${W-20}" y1="34" x2="${W-20}" y2="16" stroke="#4A5873" stroke-width="1.5"/><polygon points="${W-20},12 ${W-24},20 ${W-16},20" fill="#4A5873"/><text x="${W-20}" y="48" font-size="11" text-anchor="middle" fill="#4A5873">N</text>`;
+  svg.innerHTML=h;
+}
+
+// tabs
+const tabs=[...document.querySelectorAll('.tab')];
+function selectTab(t){tabs.forEach(b=>{const on=b===t;b.setAttribute('aria-selected',on);b.tabIndex=on?0:-1;$(b.getAttribute('aria-controls')).hidden=!on;});}
+tabs.forEach((t,i)=>{t.onclick=()=>selectTab(t);t.addEventListener('keydown',e=>{let j=null;if(e.key==='ArrowRight')j=(i+1)%tabs.length;if(e.key==='ArrowLeft')j=(i-1+tabs.length)%tabs.length;if(j!==null){tabs[j].focus();selectTab(tabs[j]);}});});
+
+['freq','gc','nexp','sdb','srng','maxErr','c6id','rlat','rlon'].forEach(id=>$(id).addEventListener('input',()=>{render();if(batch)runBatch();}));
+$('addRow').onclick=()=>{addRow();render();};
+
+const EX={c6:'C6-000777',rlat:19.0790,rlon:72.8800,rows:[
+  {id:'A6-101',lat:19.0880,lon:72.8870,tx:20,ga:16,loss:2,rssi:-42.4,rng:460},
+  {id:'A6-102',lat:19.0820,lon:72.8950,tx:20,ga:16,loss:2,rssi:-48.6},
+  {id:'A6-103',lat:19.0800,lon:72.8860,tx:20,ga:16,loss:2,rssi:-46.8},
+  {id:'A6-104',lat:19.0905,lon:72.8955,tx:20,ga:16,loss:2,rssi:-50.4}]};
+const DEF={freq:5800,gc:23,nexp:2,sdb:6,srng:20,maxErr:150};
+function clearRows(){$('a6table').tBodies[0].innerHTML='';}
+$('loadExample').onclick=()=>{Object.entries(DEF).forEach(([k,v])=>$(k).value=v);$('c6id').value=EX.c6;$('rlat').value=EX.rlat;$('rlon').value=EX.rlon;clearRows();EX.rows.forEach(addRow);render();};
+$('clearAll').onclick=()=>{Object.entries(DEF).forEach(([k,v])=>$(k).value=v);['c6id','rlat','rlon'].forEach(k=>$(k).value='');clearRows();addRow();addRow();addRow();render();};
+
+// ---------- Batch ----------
+const TEMPLATE=['c6_id,a6_id,a6_lat,a6_lon,tx_power_dbm,a6_gain_dbi,other_loss_db,rssi_dbm,ranging_distance_m,c6_db_lat,c6_db_lon',
+ 'C6-000777,A6-101,19.0880,72.8870,20,16,2,-42.4,460,19.0790,72.8800',
+ 'C6-000777,A6-102,19.0820,72.8950,20,16,2,-48.6,,19.0790,72.8800',
+ 'C6-000777,A6-103,19.0800,72.8860,20,16,2,-46.8,,19.0790,72.8800',
+ 'C6-000777,A6-104,19.0905,72.8955,20,16,2,-50.4,,19.0790,72.8800',
+ 'C6-000778,A6-101,19.0880,72.8870,20,16,2,-55.0,,19.0860,72.8820',
+ 'C6-000778,A6-103,19.0800,72.8860,20,16,2,-58.0,,19.0860,72.8820'].join('\n');
+let batch=null,batchOut=null;
+function parseCSV(text){const out=[];let row=[],f='',q=false;for(let i=0;i<text.length;i++){const c=text[i];if(q){if(c==='"'){if(text[i+1]==='"'){f+='"';i++;}else q=false;}else f+=c;}else{if(c==='"')q=true;else if(c===','){row.push(f);f='';}else if(c==='\n'||c==='\r'){if(c==='\r'&&text[i+1]==='\n')i++;row.push(f);f='';if(row.some(x=>x.trim()!==''))out.push(row);row=[];}else f+=c;}}row.push(f);if(row.some(x=>x.trim()!==''))out.push(row);return out;}
+function loadCSV(text,name){
+  const t=parseCSV(text.replace(/^\uFEFF/,''));
+  if(t.length<2){$('batchMsg').textContent=`${name}: no data rows found. The first row must be the column headers.`;return;}
+  const hdr=t[0].map(x=>x.trim().toLowerCase()),idx=k=>hdr.indexOf(k);
+  const missing=['c6_id','a6_lat','a6_lon'].filter(k=>idx(k)<0);
+  if(missing.length){$('batchMsg').textContent=`${name}: missing required column(s) ${missing.join(', ')}. Download the template to see the expected headers.`;return;}
+  const groups=new Map();
+  t.slice(1).forEach(c=>{const g=k=>idx(k)<0?undefined:c[idx(k)];const id=(g('c6_id')||'').trim();if(!id)return;
+    if(!groups.has(id))groups.set(id,{c6:id,rec:{lat:NaN,lon:NaN},rows:[]});const G=groups.get(id);
+    if(!Number.isFinite(G.rec.lat)){G.rec={lat:num(g('c6_db_lat')),lon:num(g('c6_db_lon'))};}
+    G.rows.push({use:true,id:(g('a6_id')||'').trim(),lat:num(g('a6_lat')),lon:num(g('a6_lon')),tx:num(g('tx_power_dbm')),ga:num(g('a6_gain_dbi')),loss:num(g('other_loss_db')),rssi:num(g('rssi_dbm')),rng:num(g('ranging_distance_m'))});});
+  batch=[...groups.values()];
+  $('batchMsg').textContent=`${name}: ${t.length-1} row(s), ${batch.length} C6(s) loaded.`;
+  runBatch();
+}
+const ORD={good:0,low:1,none:2};
+function runBatch(){
+  const s=settings();
+  batchOut=batch.map(G=>({G,r:solve(G.rows,G.rec,s)})).map(x=>({...x,st:x.r.error?'none':x.r.status})).sort((a,b)=>ORD[a.st]-ORD[b.st]||(b.r.recD||0)-(a.r.recD||0));
+  const cnt={good:0,low:0,none:0};batchOut.forEach(x=>cnt[x.st]++);
+  $('summary').innerHTML=`<div style="background:var(--pass-bg);color:var(--pass)">${cnt.good} usable</div><div style="background:var(--watch-bg);color:var(--watch)">${cnt.low} low confidence</div><div style="background:var(--na-bg);color:var(--ink2)">${cnt.none} not enough A6s</div>`;
+  const L={good:'Usable',low:'Low confidence',none:'Not enough data'};
+  const H=['C6','Result','A6s used','Est. latitude','Est. longitude','Error radius (m)','Geometry','RMS residual (m)','Recorded offset (m)','Recorded check','Note'];
+  $('resTable').innerHTML='<thead><tr>'+H.map(x=>`<th>${x}</th>`).join('')+'</tr></thead><tbody>'+batchOut.map(({G,r,st})=>`<tr><td>${G.c6}</td><td><span class="pill ${st}">${L[st]}</span></td><td>${r.n??0}</td><td>${F(r.lat,6)}</td><td>${F(r.lon,6)}</td><td>${F(r.errR)}</td><td>${r.geom||'–'}</td><td>${F(r.rms)}</td><td>${F(r.recD)}</td><td>${Number.isFinite(r.recD)?(r.recBad?'<span class="pill bad">Inconsistent</span>':'<span class="pill good">Consistent</span>'):'–'}</td><td style="white-space:normal;min-width:220px">${r.error||''}</td></tr>`).join('')+'</tbody>';
+  $('resWrap').hidden=false;$('dlResults').disabled=false;
+}
+function download(name,text){const b=new Blob([text],{type:'text/csv'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},500);}
+const raw=(x,d)=>Number.isFinite(x)?x.toFixed(d):'';
+const q=v=>/[",\n]/.test(v)?'"'+String(v).replace(/"/g,'""')+'"':v;
+$('dlTemplate').onclick=()=>download('c6_trilateration_template.csv',TEMPLATE);
+$('dlResults').onclick=()=>{if(!batchOut)return;const H=['c6_id','result','a6_count','est_lat','est_lon','error_radius_m','geometry','largest_gap_deg','rms_residual_m','recorded_offset_m','recorded_check','note'];
+  const Lr=batchOut.map(({G,r,st})=>[G.c6,st,r.n??0,raw(r.lat,6),raw(r.lon,6),raw(r.errR,0),r.geom||'',raw(r.gap,0),raw(r.rms,0),raw(r.recD,0),Number.isFinite(r.recD)?(r.recBad?'inconsistent':'consistent'):'',r.error||''].map(v=>q(String(v))).join(','));
+  download('c6_trilateration_results.csv',[H.join(','),...Lr].join('\n'));};
+const readFile=f=>{const rd=new FileReader();rd.onload=()=>loadCSV(rd.result,f.name);rd.readAsText(f);};
+$('csvFile').onchange=e=>{if(e.target.files[0])readFile(e.target.files[0]);e.target.value='';};
+const drop=$('drop');['dragenter','dragover'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add('over');}));['dragleave','drop'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove('over');}));drop.addEventListener('drop',e=>{const f=e.dataTransfer.files[0];if(f)readFile(f);});
+
+$('loadExample').click();
+</script>
+</body>
+</html>
