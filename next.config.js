@@ -8,10 +8,10 @@ const nextConfig = {
     optimizePackageImports: ['mapbox-gl', 'react-map-gl/mapbox', '@deck.gl/react']
   },
 
-  // Open the Neighbour Locator by default instead of the WaveDigger home page
+  // Open the tools landing page by default instead of the WaveDigger home page
   async redirects() {
     return [
-      { source: '/', destination: '/bssid-neighbour-locator.html', permanent: false },
+      { source: '/', destination: '/index.html', permanent: false },
     ];
   },
 };

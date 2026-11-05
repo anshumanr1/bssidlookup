@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Location Tools</title>
+<style>
+:root{
+  --bg:#f5f6f8; --panel:#ffffff; --ink:#15181d; --muted:#6a7280; --line:#e2e5ea;
+  --accent:#0a5bd3; --accent-ink:#ffffff; --chip:#eef1f5; --shadow:0 1px 2px rgba(0,0,0,.05);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0f1115; --panel:#171a20; --ink:#e7e9ee; --muted:#9aa3b2; --line:#2a2f38;
+    --accent:#4d8fff; --accent-ink:#0b0d11; --chip:#222731; --shadow:none;
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:980px;margin:0 auto;padding:40px 16px 56px}
+h1{font-size:26px;margin:0 0 4px;letter-spacing:-.01em}
+.lead{color:var(--muted);margin:0 0 32px}
+h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:28px 0 12px;font-weight:600}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:14px}
+a.card{display:flex;flex-direction:column;gap:6px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px 20px;color:inherit;text-decoration:none;box-shadow:var(--shadow);transition:border-color .15s,transform .15s}
+a.card:hover{border-color:var(--accent);transform:translateY(-1px)}
+a.card:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.card .title{display:flex;align-items:center;justify-content:space-between;gap:8px;font-weight:600;font-size:17px}
+.card .arrow{color:var(--accent);font-size:18px;line-height:1}
+.card .desc{color:var(--muted);font-size:14px}
+.card .tag{align-self:flex-start;font-size:11px;font-weight:600;padding:2px 8px;border-radius:10px;background:var(--chip);color:var(--muted);margin-top:4px}
+@media (prefers-reduced-motion:reduce){a.card{transition:none}a.card:hover{transform:none}}
+</style>
+</head>
+<body>
+<main>
+  <h1>Location Tools</h1>
+  <p class="lead">POC tools for locating AirFiber subscribers and checking C6 locations.</p>
+
+  <h2>BSSID lookup</h2>
+  <div class="grid">
+    <a class="card" href="/bssid-neighbour-locator.html">
+      <span class="title">BSSID Locator <span class="arrow" aria-hidden="true">→</span></span>
+      <span class="desc">Look up one router BSSID in Apple, then confirm with Google using its nearest neighbours.</span>
+      <span class="tag">Single BSSID</span>
+    </a>
+    <a class="card" href="/bssid-batch-locator.html">
+      <span class="title">BSSID Batch Locator <span class="arrow" aria-hidden="true">→</span></span>
+      <span class="desc">Run a list of BSSIDs through Apple and Google, with hit rates and a results CSV.</span>
+      <span class="tag">Batch</span>
+    </a>
+  </div>
+
+  <h2>C6 radio checks</h2>
+  <div class="grid">
+    <a class="card" href="/c6-screening.html">
+      <span class="title">C6 Location Screening <span class="arrow" aria-hidden="true">→</span></span>
+      <span class="desc">Check whether a C6’s recorded location agrees with its radio link: distance, sector and path-loss tests.</span>
+      <span class="tag">Single or batch CSV</span>
+    </a>
+    <a class="card" href="/c6-trilateration.html">
+      <span class="title">Multi-A6 Trilateration <span class="arrow" aria-hidden="true">→</span></span>
+      <span class="desc">Estimate where a suspect C6 really is from the signal levels it hears from several A6s.</span>
+      <span class="tag">Single or batch CSV</span>
+    </a>
+  </div>
+</main>
+</body>
+</html>
